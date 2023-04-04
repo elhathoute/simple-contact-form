@@ -79,7 +79,15 @@ class SimpleContactForm {
         </div>
         <div class="card-body p-3">
           <p class="text-muted text-center mb-3">Remplir cette formulaire</p>
+          <div 
+          style="background-color: green;color:white"
+          id="enquiry-form-success"></div>
+            <div
+          style="background-color: red;color:white"
+
+             id="enquiry-form-error"></div>
           <form id="simple-contact-form__form">
+          
             <div class="row">
               <div class="col-md-6">
                 <div class="mb-3">
@@ -124,19 +132,28 @@ class SimpleContactForm {
     public function  load_scripts()
     {?>
 <script>
-    var nonce = '<?php echo wp_create_nonce('wp_rest');?>';
+    // var nonce = '<?php echo wp_create_nonce('wp_rest');?>';
 
    jQuery(document).ready(function($) {
        $('#simple-contact-form__form').submit(function(e){
           e.preventDefault();
-
+          $("#form_error").hide();
         var form = $(this).serialize();
        $.ajax({
-        method:'post',
+        type:'POST',
         url: '<?php echo get_rest_url(null,'simple-contact-form/v1/send-email'); ?>',
-        headers:{'X-WP-Nonce': nonce},
-        data:form
+        data:form,
+        success:function(res){
+            form.hide();
+            $("#form_success").html(res).fadeIn();
+
+        },
+        error:function(error){
+          $("#form_error").html("There was an error submitting").fadeIn();
+
+        }
        })
+
 
 
        });
@@ -157,25 +174,72 @@ class SimpleContactForm {
     
     $headers = $data->get_headers();
     $params = $data->get_params();
-
-   $nonce =  $headers['x_wp_nonce'][0];
-//    $nonce =  11111111111111;
-
-   if(!wp_verify_nonce($nonce,'wp_rest')){
-   
-    return new WP_REST_RESPONSE('Message not Sent',422);
-
-
-   }
+    
+    if (isset($headers['x_wp_nonce'][0])) {
+        $nonce = $headers['x_wp_nonce'][0];
+        if (!wp_verify_nonce($nonce, 'wp_rest')) {
+            return new WP_REST_Response('Message not sent', 422);
+        }
+    } 
   $post_id = wp_insert_post([
     'post_type'=>'simple_contact_form',
-    'post_title'=>'Contact anquiry',
-    'post_status'=>'publish'
+    'post_title'=>'Email :'.$params['email'],
+    'post_status'=>'publish',
+    
   ]);
+
    if($post_id){
-    return new WP_REST_Response('Thank you for Email',200);
+ 
+    return new WP_REST_Response('Thank you for Email'.$table_name,200);
    }
+  //  add to db
+  // if (isset($_POST['name'], $_POST['email'], $_POST['phone'], $_POST['message'])) {
+  //   $name = sanitize_text_field($_POST['name']);
+  //   $email = sanitize_email($_POST['email']);
+  //   $phone = sanitize_text_field($_POST['phone']);
+  //   $message = esc_textarea($_POST['message']);
+
+  //   // Perform validation using regular expressions
+  //   $valid = true;
+  //   $regex = '/^[a-zA-Z ]*$/'; // Only letters and spaces
+  //   if (!preg_match($regex, $name)) {
+  //     $valid = false;
+  //     $error_message = 'Name can only contain letters and spaces.';
+  //   }
+  //   $regex = '/^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/';
+  //   if (!preg_match($regex, $email)) {
+  //     $valid = false;
+  //     $error_message = 'Invalid email address.';
+  //   }
+
+  //   if ($valid) {
+  //     // Add the form data to the WordPress database
+     
+
+  //   }
+  // }
+unset($params['_wpnonce']);
+unset($params['_wp_http_referer']);
+//    send the email message
+   $headers = [];
+
+   $admin_email = get_bloginfo('admin_email');
+   $admin_name = get_bloginfo('name');
+
+   $headers[] = "From:{$admin_name} <{$admin_email}>";
+   $headers[]="Replay-to:{$params['name']} <{$params['email']}>";
+
+   $subject = "New enquiry from {$params['name']}";
+
+   $message ='';
+   $message .="Message has been sent from {$params['name']} <br /> <br />";
+ 
+   foreach($params as $label=>$value){
+    $message .=ucfirst($label).':'.$value;
    }
+   wp_mail($admin_email,$subject,$message,$headers);
+   return new WP_REST_RESPONSE('the message was sent',422);
+}
 
 }
 
